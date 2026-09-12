@@ -82,6 +82,65 @@ class WorldModel(nn.Module):
             concept_predictors.append(p_copy)
             
         self._lora_adapters[concept_name] = concept_predictors
+
+    def merge_adapters(self, active_concepts: list, new_concept_name: str = "merged_consensus"):
+        """
+        Task Vector Merging (Consensus Pruning).
+        Resolves sign conflicts when multiple adapters are applied simultaneously.
+        """
+        if len(active_concepts) < 2:
+            return
+            
+        import copy
+        
+        # Create a new set of predictors for the merged concept
+        merged_predictors = nn.ModuleList()
+        
+        for p_idx, p_base in enumerate(self.predictors):
+            p_merged = copy.deepcopy(p_base)
+            original_linear = p_merged.net[6]
+            
+            # We will compute the consensus delta_W explicitly
+            delta_w_sum = torch.zeros_like(original_linear.weight)
+            sign_consensus = torch.zeros_like(original_linear.weight)
+            
+            for concept in active_concepts:
+                adapter_net = self._lora_adapters[concept][p_idx].net[6] # LoRALinear
+                A = adapter_net.lora_A
+                B = adapter_net.lora_B
+                scaling = adapter_net.scaling
+                
+                # PyTorch linear layer weight shape is (out_features, in_features)
+                # x @ A @ B is equivalent to x @ (A @ B)
+                # Thus the effective weight delta is ((A @ B) * scaling).t()
+                delta_w = (A @ B).t() * scaling 
+                
+                delta_w_sum += delta_w
+                sign_consensus += torch.sign(delta_w)
+                
+            # Consensus pruning: If signs conflict (sum of signs is close to 0), we prune the weight.
+            # e.g., if 2 adapters agree, abs(sign_consensus) == 2. If they conflict, it's 0.
+            consensus_mask = (torch.abs(sign_consensus) == len(active_concepts)).float()
+            
+            # Apply mask to the sum to nullify conflicted weights (they cancel out cleanly instead of adding noise)
+            pruned_delta_w = delta_w_sum * consensus_mask
+            
+            # Inject the pruned_delta_w directly into a static base weight for this merged predictor
+            # This avoids tracking multiple active adapters dynamically during the forward pass.
+            merged_linear = nn.Linear(original_linear.in_features, original_linear.out_features)
+            merged_linear.weight = nn.Parameter(original_linear.weight + pruned_delta_w)
+            if original_linear.bias is not None:
+                merged_linear.bias = nn.Parameter(original_linear.bias)
+                
+            # Freeze it
+            merged_linear.weight.requires_grad = False
+            if merged_linear.bias is not None:
+                merged_linear.bias.requires_grad = False
+                
+            p_merged.net[6] = merged_linear
+            merged_predictors.append(p_merged)
+            
+        self._lora_adapters[new_concept_name] = merged_predictors
         
     def set_active_lora(self, concept_name: str):
         """Swaps the active predictors to the LoRA-adapted ones."""

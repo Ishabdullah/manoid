@@ -147,7 +147,8 @@
 
 ### Steps:
 - [x] Research: Evaluate how to extract symbolic rules (program induction) or consolidate via LoRA without catastrophic forgetting.
-  - *Findings:* Implemented a Multi-Tiered Cognitive Consolidation Pipeline. Tier 1 (Base Intuition) uses random Neural Replay to slowly bake in normal physics. Tier 2 (Analogical Reasoning) uses dynamically loaded LoRA adapters to learn abstract mathematical concepts (like "Boundary Resistance" where state doesn't change). Tier 3 (Symbolic) uses an explicit rule dictionary to encode hard anomalies that defy neural reasoning (like teleportation tiles).
+  - *Findings:* Implemented a Multi-Tiered Cognitive Consolidation Pipeline. Tier 1 (Base Intuition) uses random Neural Replay to slowly bake in normal physics. Tier 2 (Analogical Reasoning) uses dynamically loaded LoRA adapters to learn abstract mathematical concepts (like "Boundary Resistance" where state doesn't change). Tier 3 (Symbolic) uses an explicit rule dictionary to encode hard anomalies that defy neural reasoning (like teleportation tiles). 
+  - *Safety Patch:* Added `merge_adapters()` to `WorldModel` utilizing **Task Vector Merging (Sign-Consensus Pruning)** to safely combine multiple abstract thoughts/LoRAs without their matrix weights blowing out or canceling each other out.
 - [x] Implementer: Run a batch of episodes. Confirm a generalized rule is extracted, and run a forgetting-check to prove previous behavior remains intact.
   - *Output:*
     ```
