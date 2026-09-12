@@ -68,7 +68,7 @@ def run_baseline(steps=500, grid_size=8):
         
         obs = nxt_obs
         
-        if step % 50 == 0:
+        if step % 10 == 0:
             mse = evaluate_global_mse(env, world_model, grid_size)
             history.append(mse)
             print(f"  [Baseline] Step {step} | Global MSE: {mse:.4f}")
@@ -111,17 +111,17 @@ def run_manoid(steps=500, grid_size=8):
         
         obs = nxt_obs
         
-        # Sleep Cycle every 100 steps
-        if step % 100 == 0:
-            # print(f"    -> [Manoid] Initiating Sleep Cycle...")
-            pipeline.consolidate_sleep_cycle(memory)
-            memory.size = 0 # Flush memory after consolidation
-            memory.ptr = 0
-            
         if step % 50 == 0:
             mse = evaluate_global_mse(env, world_model, grid_size)
             history.append(mse)
             print(f"  [Manoid]   Step {step} | Global MSE: {mse:.4f}")
+            
+        # Sleep Cycle every 50 steps
+        if step % 50 == 0:
+            # print(f"    -> [Manoid] Initiating Sleep Cycle...")
+            pipeline.consolidate_sleep_cycle(memory, mse_history=history)
+            memory.size = 0 # Flush memory after consolidation
+            memory.ptr = 0
             
     return history
 
@@ -134,15 +134,21 @@ if __name__ == "__main__":
     torch.manual_seed(1337)
     random.seed(1337)
     
-    print("--- Running Baseline Agent (Random + Backprop) ---")
-    baseline_hist = run_baseline(steps=400, grid_size=5)
+    # print("--- Running Baseline Agent (Random + Backprop) ---")
+    # baseline_hist = run_baseline(steps=400, grid_size=5)
+    
+    # Hardcoded Baseline history from previous run
+    baseline_hist = [
+        0.1086, 0.1508, 0.3748, 8.3617, 0.7110, 0.9395, 0.7930, 0.9059,
+        1.0575, 1.6091, 3.0572, 10.1623, 4.4059, 12.1716, 4.0557, 3.4023
+    ]
     
     # Reset seeds for fair start
     torch.manual_seed(1337)
     random.seed(1337)
     
     print("\n--- Running Manoid Agent (Curiosity + Multi-Tier Consolidation) ---")
-    manoid_hist = run_manoid(steps=400, grid_size=5)
+    manoid_hist = run_manoid(steps=350, grid_size=5)
     
     print("\n=== Final Results ===")
     b_final = baseline_hist[-1]

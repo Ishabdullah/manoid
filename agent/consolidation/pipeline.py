@@ -16,7 +16,7 @@ class ConsolidationPipeline:
         self.tier2_lora = AnalogicalReasoningLoRA(world_model)
         self.tier3_symbolic = SymbolicRuleBase()
         
-    def consolidate_sleep_cycle(self, episodic_memory):
+    def consolidate_sleep_cycle(self, episodic_memory, mse_history=None):
         """
         Runs the full triage and consolidation offline.
         """
@@ -57,7 +57,35 @@ class ConsolidationPipeline:
                 # Normal movement
                 tier1_indices.append(i)
                 
-        # 3. Route to Tiers
+        # Dynamic Plasticity Logic for Hybrid Router
+        skip_tier2 = False
+        if mse_history is None or len(mse_history) < 3:
+            # Not enough history to evaluate a twice-up regression. Default to TRAIN.
+            print("  [Manoid] Plasticity: Insufficient history. Defaulting to Tier 2 consolidation.")
+        else:
+            prev2_mse = mse_history[-3]
+            prev1_mse = mse_history[-2]
+            current_mse = mse_history[-1]
+            
+            if current_mse > prev1_mse and prev1_mse > prev2_mse:
+                print("  [Manoid] Plasticity: Twice-up regression detected. Triggering Tier 2 consolidation.")
+                pass # Condition A (Twice-Up Regression): TRAIN
+            else:
+                skip_tier2 = True # Condition B (Stable, Improving, or Noise): SKIP
+                print("  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.")
+                
+        if skip_tier2:
+            tier1_indices.extend(tier2_indices)
+            tier2_indices = []
+            
+        # Cap Tier 2 Routing to 60% of the batch to prevent "Everything is a Nail" problem
+        batch_size = states.shape[0]
+        max_tier2_size = int(0.6 * batch_size)
+        if len(tier2_indices) > max_tier2_size:
+            # Force the excess into Tier 1 (Replay) to maintain base instincts
+            excess_indices = tier2_indices[max_tier2_size:]
+            tier1_indices.extend(excess_indices)
+            tier2_indices = tier2_indices[:max_tier2_size]
         
         # Tier 1: Base Intuition
         if tier1_indices:
