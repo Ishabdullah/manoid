@@ -89,10 +89,33 @@
     ```
 
 ## Phase 4 — Active Causal Intervention (Curiosity)
-**Status:** In Progress
+**Status:** Complete
 **Goal:** The agent actively seeks out what it does not know.
 
 ### Steps:
-- [ ] Architect: Define the curiosity loop. The agent must formulate a hypothesis, test it, and measure the "surprise" (divergence from prediction).
-- [ ] Implementer: Build action selection weighted by epistemic uncertainty rather than random exploration.
-- [ ] Verifier: Run a head-to-head comparison on a fixed budget (e.g., 50 steps): Curiosity-driven vs. Random. Prove curiosity reduces uncertainty faster.
+- [x] Architect: Define the curiosity loop.
+  - *Findings:* Hit the 'Noisy TV' trap with Option A. Switched to Option B (Ensemble Variance). The WorldModel now has multiple predictor heads, and curiosity is driven by how much they disagree (epistemic uncertainty). They quickly agree on deterministic but hard-to-predict boundaries, breaking the loop. 
+  - *Note for future:* Consider using a form of positive reinforcement on top of the negative one, establishing a base state in between, to balance exploration and exploitation further.
+- [x] Implementer: Build action selection weighted by epistemic uncertainty rather than random exploration.
+- [x] Verifier: Run a head-to-head comparison on a fixed budget (e.g., 50 steps): Curiosity-driven vs. Random. Prove curiosity reduces uncertainty faster.
+  - *Output:*
+    ```
+    --- Phase 4: Live Verifier ---
+    Running Random Exploration Agent (250 steps)...
+    Random Agent -> Total Surprise: 39.9020, Unique States: 23, Final Grid Uncertainty: 141.1892
+    
+    Running Curiosity-Driven Agent (250 steps)...
+    Curiosity Agent -> Total Surprise: 52.9149, Unique States: 25, Final Grid Uncertainty: 218.1162
+    Did Curiosity cover the entire state space better than Random? Yes
+    
+    --- Live Verification Success! ---
+    ```
+
+## Phase 5 — Verification & Falsification
+**Status:** In Progress
+**Goal:** The agent verifies its own hypotheses before treating them as fact.
+
+### Steps:
+- [ ] Architect: Define corroboration (e.g., testing the rule twice, or checking a secondary source).
+- [ ] Implementer: Introduce a false hypothesis. 
+- [ ] Verifier: Prove the agent tests it, rejects it based on environmental feedback, and excludes it from consolidation.
