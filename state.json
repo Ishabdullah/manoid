@@ -1,6 +1,6 @@
 {
-  "phase": 1,
+  "phase": 2,
   "quota_used_hours": 0.0,
-  "last_checkpoint": "phase-0-complete",
+  "last_checkpoint": "phase-1-complete",
   "status": "in_progress"
 }
