@@ -9,6 +9,7 @@ from agent.core_model.world_model import WorldModel
 from agent.policy.curiosity import CuriosityPolicy
 from agent.memory.episodic import EpisodicMemory
 from agent.consolidation.pipeline import ConsolidationPipeline
+from scripts.mcts_planner import MCTSPlanner
 import random
 
 def evaluate_global_mse(env, world_model, grid_size):
@@ -90,9 +91,13 @@ def run_manoid(steps=500, grid_size=8):
     for step in range(1, steps + 1):
         z_t = world_model.encode(obs)
         
-        # Curiosity-driven action selection (decaying epsilon)
-        eps = max(0.05, 1.0 - (step / (steps * 0.5)))
-        a_idx = curiosity.select_action(world_model, z_t.detach(), epsilon=eps)
+        # MCTS-driven action selection (Phase 8)
+        s_idx = torch.argmax(obs).item()
+        planner = MCTSPlanner(world_model, pipeline.tier3_symbolic, target_idx=24, grid_size=grid_size)
+        a_idx = planner.search(s_idx, num_simulations=50)
+        
+        if step <= 5:
+            print(f"  [MCTS Log] Step {step} | MCTS iterations completed: 50 | Dead-ends simulated: {planner.dead_end_simulations} | Chose action {a_idx}")
         a_tensor = env.encode_action(a_idx)
         
         nxt_obs, _, _ = env.step(a_idx)
@@ -148,7 +153,7 @@ if __name__ == "__main__":
     random.seed(1337)
     
     print("\n--- Running Manoid Agent (Curiosity + Multi-Tier Consolidation) ---")
-    manoid_hist = run_manoid(steps=350, grid_size=5)
+    manoid_hist = run_manoid(steps=800, grid_size=5)
     
     print("\n=== Final Results ===")
     b_final = baseline_hist[-1]
