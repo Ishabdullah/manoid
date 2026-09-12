@@ -62,11 +62,37 @@
     ```
 
 ## Phase 3 — Environment & Causal World Model
-**Status:** In Progress
+**Status:** Complete
 **Goal:** A playground where actions have observable consequences, so the agent can test hypotheses.
 
 ### Steps:
-- [ ] Research: Evaluate a minimal environment (e.g., MiniGrid, Crafter) vs. a custom symbolic grid.
-- [ ] Architect: Define how the agent interacts (do(X) interventions) and logs transitions.
-- [ ] Implementer: Wire the environment, log real transitions.
-- [ ] Verifier: Prove the agent's internal state tracking matches the environment's ground truth.
+- [x] Research: Evaluate a minimal environment (e.g., MiniGrid, Crafter) vs. a custom symbolic grid.
+  - *Findings:* Decided on Option A (Custom Symbolic Grid Environment) for its lightweight Termux compatibility and pure causal logging, with a note to potentially upgrade to Option B (MiniGrid/Gymnasium) later after baseline tests.
+- [x] Architect: Define how the agent interacts (do(X) interventions) and logs transitions.
+- [x] Implementer: Wire the environment, log real transitions.
+- [x] Verifier: Prove the agent's internal state tracking matches the environment's ground truth.
+  - *Output:*
+    ```
+    --- Phase 3: Live Verifier ---
+    Initialized Custom Symbolic Grid Environment (5x5).
+    
+    Executing do(X) sequence and logging transitions...
+    Step 1: Transition Logged | State(pos): 0 -> Action: 1 -> NextState(pos): 1
+    Step 2: Transition Logged | State(pos): 1 -> Action: 2 -> NextState(pos): 6
+    Step 3: Transition Logged | State(pos): 6 -> Action: 2 -> NextState(pos): 11
+    Step 4: Transition Logged | State(pos): 11 -> Action: 3 -> NextState(pos): 10
+    
+    Wall collision test...
+    Transition Logged | State(pos): 10 -> Action: 3 -> NextState(pos): 10
+    
+    --- Live Verification Success! Internal state tracking perfectly matches environmental ground truth. ---
+    ```
+
+## Phase 4 — Active Causal Intervention (Curiosity)
+**Status:** In Progress
+**Goal:** The agent actively seeks out what it does not know.
+
+### Steps:
+- [ ] Architect: Define the curiosity loop. The agent must formulate a hypothesis, test it, and measure the "surprise" (divergence from prediction).
+- [ ] Implementer: Build action selection weighted by epistemic uncertainty rather than random exploration.
+- [ ] Verifier: Run a head-to-head comparison on a fixed budget (e.g., 50 steps): Curiosity-driven vs. Random. Prove curiosity reduces uncertainty faster.
