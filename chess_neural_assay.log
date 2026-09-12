@@ -1,0 +1,124 @@
+=== Phase 10: Closed-Loop Neural Consolidation ===
+Environment: Micro-Chess (K+R vs K)
+Model: ChessValueModel with LoRA Adapter
+--------------------------------------------------
+[Episode 1] Moves: 10 | Avg MSE: 0.06
+  -> Plasticity: Insufficient history. Defaulting to TRAIN.
+[Episode 2] Moves: 10 | Avg MSE: 0.03
+  -> Plasticity: Insufficient history. Defaulting to TRAIN.
+[Episode 3] Moves: 10 | Avg MSE: 0.06
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 4] Moves: 10 | Avg MSE: 0.04
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 5] Moves: 10 | Avg MSE: 0.04
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 6] Moves: 5 | Avg MSE: 49991302.87
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 7] Moves: 10 | Avg MSE: 0.03
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 8] Moves: 10 | Avg MSE: 0.17
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 9] Moves: 10 | Avg MSE: 0.02
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 10] Moves: 9 | Avg MSE: 24991487.65
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 11] Moves: 10 | Avg MSE: 0.09
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 12] Moves: 10 | Avg MSE: 0.10
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 13] Moves: 10 | Avg MSE: 0.06
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 14] Moves: 10 | Avg MSE: 0.29
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 15] Moves: 10 | Avg MSE: 0.05
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 16] Moves: 10 | Avg MSE: 0.10
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 17] Moves: 10 | Avg MSE: 0.09
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 18] Moves: 10 | Avg MSE: 0.03
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 19] Moves: 10 | Avg MSE: 0.19
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 20] Moves: 10 | Avg MSE: 0.04
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 21] Moves: 10 | Avg MSE: 0.06
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 22] Moves: 5 | Avg MSE: 49982104.34
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 23] Moves: 1 | Avg MSE: 99980411.45
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 24] Moves: 10 | Avg MSE: 0.16
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 25] Moves: 10 | Avg MSE: 0.16
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 26] Moves: 10 | Avg MSE: 0.28
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 27] Moves: 9 | Avg MSE: 24983096.40
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 28] Moves: 10 | Avg MSE: 0.05
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 29] Moves: 10 | Avg MSE: 0.04
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 30] Moves: 10 | Avg MSE: 0.05
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 31] Moves: 1 | Avg MSE: 99947418.63
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 32] Moves: 5 | Avg MSE: 50744500.08
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 33] Moves: 10 | Avg MSE: 0.08
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 34] Moves: 10 | Avg MSE: 0.01
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 35] Moves: 7 | Avg MSE: 33308068.96
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 36] Moves: 5 | Avg MSE: 51351269.39
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 37] Moves: 10 | Avg MSE: 0.04
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 38] Moves: 10 | Avg MSE: 0.02
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 39] Moves: 5 | Avg MSE: 50459593.26
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 40] Moves: 1 | Avg MSE: 99924235.96
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 41] Moves: 3 | Avg MSE: 99926752.56
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 42] Moves: 5 | Avg MSE: 50738745.35
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 43] Moves: 3 | Avg MSE: 99917832.46
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 44] Moves: 10 | Avg MSE: 0.02
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 45] Moves: 5 | Avg MSE: 50738745.33
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 46] Moves: 7 | Avg MSE: 33306026.76
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 47] Moves: 3 | Avg MSE: 99918080.17
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 48] Moves: 3 | Avg MSE: 99917832.49
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 49] Moves: 1 | Avg MSE: 99916034.99
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 50] Moves: 5 | Avg MSE: 49959040.14
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 51] Moves: 3 | Avg MSE: 99917832.47
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 52] Moves: 5 | Avg MSE: 49959040.09
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 53] Moves: 10 | Avg MSE: 0.01
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 54] Moves: 5 | Avg MSE: 50738745.28
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 55] Moves: 3 | Avg MSE: 99918918.11
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 56] Moves: 5 | Avg MSE: 50977133.39
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 57] Moves: 5 | Avg MSE: 50738230.20
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 58] Moves: 7 | Avg MSE: 33305512.69
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 59] Moves: 5 | Avg MSE: 50738230.20
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 60] Moves: 1 | Avg MSE: 99915661.62
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
