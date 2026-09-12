@@ -53,12 +53,56 @@ class WorldModel(nn.Module):
         # Ensemble of Predictors to solve Noisy TV trap
         self.predictors = nn.ModuleList([Predictor(latent_dim, action_dim) for _ in range(num_heads)])
         
+        # Track original architecture modules for LoRA swapping
+        self._lora_adapters = nn.ModuleDict()
+        self._active_lora = None
+
+    def apply_lora_adapter(self, concept_name: str, rank: int = 4):
+        """
+        Creates a LoRA adapter for the given concept.
+        We apply LoRA to the final linear layer of each predictor head.
+        """
+        if concept_name in self._lora_adapters:
+            return
+            
+        import copy
+        from agent.consolidation.lora import LoRALinear
+        
+        concept_predictors = nn.ModuleList()
+        for p in self.predictors:
+            # Copy the predictor to maintain base weights securely
+            p_copy = copy.deepcopy(p)
+            
+            # Find the last linear layer in the sequential block
+            # For our architecture, it's net[6]
+            original_linear = p_copy.net[6]
+            
+            # Replace with LoRALinear
+            p_copy.net[6] = LoRALinear(original_linear, rank=rank)
+            concept_predictors.append(p_copy)
+            
+        self._lora_adapters[concept_name] = concept_predictors
+        
+    def set_active_lora(self, concept_name: str):
+        """Swaps the active predictors to the LoRA-adapted ones."""
+        if concept_name in self._lora_adapters:
+            # We temporarily swap self.predictors (though nn.ModuleList behavior requires care)
+            # To be safe and clean, we'll just redirect prediction through them
+            self._active_lora = concept_name
+            
+    def deactivate_lora(self):
+        """Returns to the base intuition model."""
+        self._active_lora = None
+        
     def encode(self, obs: torch.Tensor) -> torch.Tensor:
         """Extract embeddings from raw observations."""
         return self.encoder(obs)
         
     def predict_ensemble(self, z: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         """Returns predictions from all heads. Shape: (num_heads, batch, latent_dim)"""
+        if self._active_lora is not None:
+            active_preds = self._lora_adapters[self._active_lora]
+            return torch.stack([p(z, action) for p in active_preds])
         return torch.stack([p(z, action) for p in self.predictors])
         
     def predict_next(self, z: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
