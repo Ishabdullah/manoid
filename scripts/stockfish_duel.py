@@ -10,7 +10,7 @@ from agent.environment.micro_chess_env import MicroChessEnv
 from scripts.chess_neural_assay import ChessValueModel, NeuralMCTSPlanner
 
 def run_duel(num_games=5):
-    print("=== Phase 11: The Stockfish Benchmark ===")
+    print("=== Phase 13: The Final Benchmark Rematch ===")
     print("Match: Manoid (White) vs Stockfish Level 1 (Black)")
     print("Scenario: K+R vs K")
     print("--------------------------------------------------")
@@ -18,14 +18,13 @@ def run_duel(num_games=5):
     env = MicroChessEnv()
     value_model = ChessValueModel()
     
-    # We will initialize it, though normally we'd load trained weights.
-    # We'll just run it as-is for the Duel, or let it train via the same assay loop?
-    # The prompt says: "Manoid must use its trained Tier 2 LoRA intuitions and the MCTS planner to force the mate against a perfect defending engine."
-    # Since we didn't save weights in Phase 10, we can run a quick offline training on the mate-in-2, or just use the MCTS search which is deep enough if we give it iterations. 
-    # Let's give it 200 simulations.
-    
     value_model.apply_lora_adapter("ChessEndgame", rank=8)
     value_model.set_active_lora("ChessEndgame")
+    try:
+        value_model.load_state_dict(torch.load("chess_lora_weights_phase12.pt"))
+        print("[System] Loaded trained weights from chess_lora_weights_phase12.pt")
+    except Exception as e:
+        print(f"[System] Warning: Could not load weights: {e}")
     
     planner = NeuralMCTSPlanner(env, value_model)
 
@@ -47,7 +46,7 @@ def run_duel(num_games=5):
         while not board.is_game_over() and moves_made < 50:
             if board.turn == chess.WHITE:
                 # Manoid's turn
-                best_move, target_q = planner.search_with_q(board.fen(), num_simulations=400)
+                best_move, target_q = planner.search_with_q(board.fen(), num_simulations=1000)
                 if best_move is None:
                     break
                 board.push(best_move)
