@@ -40,34 +40,40 @@ class MicroChessEnv:
                 tensor[0, idx] = 1.0
         return tensor
 
-    def evaluate_heuristic(self, fen):
+    def evaluate_heuristic(self, fen, role="predator", agent_color=chess.WHITE):
         """
         Tier 2 proxy: The LoRA adapter's heuristic reward logic.
         """
         board = chess.Board(fen)
         
         if board.is_checkmate():
-            if board.turn == chess.BLACK:
-                return 1.0 # White delivered checkmate
+            if board.turn == agent_color:
+                return -1.0 # Agent was checkmated
             else:
-                return -1.0 # Black delivered checkmate
+                return 1.0 # Agent delivered checkmate
                 
         if board.is_stalemate() or board.is_insufficient_material() or board.is_repetition() or board.is_fifty_moves():
-            return -1.0
+            return -1.0 if role == "predator" else 0.5
             
         value = 0.0
-        wk_square = board.king(chess.WHITE)
-        bk_square = board.king(chess.BLACK)
+        predator_color = agent_color if role == "predator" else (not agent_color)
+        prey_color = not predator_color
+        
+        wk_square = board.king(predator_color)
+        bk_square = board.king(prey_color)
         
         if wk_square is not None and bk_square is not None:
             wk_rank, wk_file = chess.square_rank(wk_square), chess.square_file(wk_square)
             bk_rank, bk_file = chess.square_rank(bk_square), chess.square_file(bk_square)
             
             distance = max(abs(wk_rank - bk_rank), abs(wk_file - bk_file))
-            value -= distance * 0.01
-            
-            # Penalize Black king not on edge
-            if bk_rank == 0 or bk_rank == 7 or bk_file == 0 or bk_file == 7:
-                value += 0.1
+            if role == "predator":
+                value -= distance * 0.01
+                if bk_rank == 0 or bk_rank == 7 or bk_file == 0 or bk_file == 7:
+                    value += 0.1
+            else:
+                value += distance * 0.01
+                if bk_rank == 0 or bk_rank == 7 or bk_file == 0 or bk_file == 7:
+                    value -= 0.1
                 
         return value

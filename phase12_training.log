@@ -1,0 +1,102 @@
+=== Phase 12: Adversarial Self-Play & Contextual Rewards ===
+[System] Loaded initial weights from chess_lora_weights.pt
+[Episode 1] Prey (Black) | Result: Checkmated (Lost) (28 moves) | Avg MSE: 1.0525
+  -> Plasticity: Insufficient history. Defaulting to TRAIN.
+[Episode 2] Predator (Black) | Result: Draw/Stalemate (19 moves) | Avg MSE: 0.0240
+  -> Plasticity: Insufficient history. Defaulting to TRAIN.
+[Episode 3] Predator (White) | Result: Checkmate (Won) (9 moves) | Avg MSE: 0.1560
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 4] Predator (Black) | Result: Draw/Stalemate (30 moves) | Avg MSE: 0.0142
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 5] Prey (White) | Result: Max moves (30 moves) | Avg MSE: 0.0769
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 6] Prey (White) | Result: Max moves (1 moves) | Avg MSE: 0.2104
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 7] Predator (White) | Result: Checkmate (Won) (5 moves) | Avg MSE: 0.2143
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 8] Prey (Black) | Result: Checkmated (Lost) (20 moves) | Avg MSE: 0.3735
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 9] Predator (White) | Result: Checkmate (Won) (5 moves) | Avg MSE: 0.0791
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 10] Predator (White) | Result: Checkmate (Won) (3 moves) | Avg MSE: 0.6712
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 11] Predator (White) | Result: Checkmate (Won) (4 moves) | Avg MSE: 0.1249
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 12] Prey (Black) | Result: Checkmated (Lost) (7 moves) | Avg MSE: 0.2963
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 13] Predator (White) | Result: Checkmate (Won) (3 moves) | Avg MSE: 0.3312
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 14] Prey (White) | Result: Checkmated (Lost) (19 moves) | Avg MSE: 0.3089
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 15] Predator (White) | Result: Checkmate (Won) (6 moves) | Avg MSE: 0.0806
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 16] Predator (White) | Result: Checkmate (Won) (3 moves) | Avg MSE: 0.1156
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 17] Prey (Black) | Result: Max moves (30 moves) | Avg MSE: 0.2808
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 18] Predator (White) | Result: Checkmate (Won) (4 moves) | Avg MSE: 0.1284
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 19] Prey (White) | Result: Max moves (30 moves) | Avg MSE: 0.0453
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 20] Predator (White) | Result: Checkmate (Won) (4 moves) | Avg MSE: 0.6337
+  -> Plasticity: Relative Magnitude Bypass detected! Triggering TRAIN.
+[Episode 21] Prey (White) | Result: Checkmated (Lost) (17 moves) | Avg MSE: 0.1660
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 22] Prey (White) | Result: Checkmated (Lost) (6 moves) | Avg MSE: 0.1089
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 23] Prey (White) | Result: Max moves (30 moves) | Avg MSE: 0.1378
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 24] Prey (Black) | Result: Max moves (30 moves) | Avg MSE: 0.0234
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 25] Predator (Black) | Result: Draw/Stalemate (21 moves) | Avg MSE: 0.0554
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 26] Predator (White) | Result: Max moves (30 moves) | Avg MSE: 0.0516
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 27] Prey (White) | Result: Checkmated (Lost) (17 moves) | Avg MSE: 0.1342
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 28] Prey (Black) | Result: Checkmated (Lost) (28 moves) | Avg MSE: 0.2150
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 29] Prey (Black) | Result: Max moves (30 moves) | Avg MSE: 0.1207
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 30] Predator (Black) | Result: Checkmate (Won) (4 moves) | Avg MSE: 0.1592
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 31] Prey (White) | Result: Checkmated (Lost) (21 moves) | Avg MSE: 0.0845
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 32] Predator (Black) | Result: Draw/Stalemate (24 moves) | Avg MSE: 0.0345
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 33] Prey (Black) | Result: Checkmated (Lost) (19 moves) | Avg MSE: 0.0688
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 34] Prey (White) | Result: Checkmated (Lost) (12 moves) | Avg MSE: 0.1159
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 35] Predator (Black) | Result: Max moves (30 moves) | Avg MSE: 0.0580
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 36] Prey (Black) | Result: Checkmated (Lost) (26 moves) | Avg MSE: 0.0559
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 37] Predator (Black) | Result: Checkmate (Won) (1 moves) | Avg MSE: 1.0557
+  -> Plasticity: Relative Magnitude Bypass detected! Triggering TRAIN.
+[Episode 38] Predator (White) | Result: Checkmate (Won) (2 moves) | Avg MSE: 0.9845
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 39] Predator (Black) | Result: Draw/Stalemate (19 moves) | Avg MSE: 0.0237
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 40] Predator (Black) | Result: Checkmate (Won) (5 moves) | Avg MSE: 0.0781
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 41] Prey (Black) | Result: Checkmated (Lost) (4 moves) | Avg MSE: 0.3130
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 42] Predator (White) | Result: Checkmate (Won) (5 moves) | Avg MSE: 0.2482
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 43] Predator (White) | Result: Max moves (30 moves) | Avg MSE: 0.0349
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 44] Predator (White) | Result: Max moves (30 moves) | Avg MSE: 0.0705
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 45] Predator (White) | Result: Checkmate (Won) (8 moves) | Avg MSE: 0.2610
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 46] Predator (White) | Result: Checkmate (Won) (2 moves) | Avg MSE: 1.0424
+  -> Plasticity: Twice-up regression detected. Triggering TRAIN.
+[Episode 47] Predator (White) | Result: Max moves (30 moves) | Avg MSE: 0.0562
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 48] Predator (Black) | Result: Draw/Stalemate (30 moves) | Avg MSE: 0.0185
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
+[Episode 49] Predator (Black) | Result: Checkmate (Won) (2 moves) | Avg MSE: 0.3170
+  -> Plasticity: Relative Magnitude Bypass detected! Triggering TRAIN.
+[Episode 50] Predator (White) | Result: Checkmate (Won) (3 moves) | Avg MSE: 0.0259
+  -> Plasticity: Error stable/recovering. SKIPPING consolidation.
