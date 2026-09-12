@@ -157,7 +157,7 @@ def run_neural_assay(episodes=60):
         ep_mse = ep_mse_sum / max(1, moves_made // 2)
         mse_history.append(ep_mse)
         
-        print(f"[Episode {ep}] Moves: {moves_made} | Avg MSE: {ep_mse:.2f}")
+        print(f"[Episode {ep}] Moves: {moves_made} | Avg MSE: {ep_mse:.4f}")
         
         skip_consolidation = False
         if len(mse_history) < 3:
