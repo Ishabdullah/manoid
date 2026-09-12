@@ -48,12 +48,12 @@ class MicroChessEnv:
         
         if board.is_checkmate():
             if board.turn == chess.BLACK:
-                return 10000.0 # White delivered checkmate
+                return 1.0 # White delivered checkmate
             else:
-                return -10000.0 # Black delivered checkmate
+                return -1.0 # Black delivered checkmate
                 
         if board.is_stalemate() or board.is_insufficient_material() or board.is_repetition() or board.is_fifty_moves():
-            return -10000.0
+            return -1.0
             
         value = 0.0
         wk_square = board.king(chess.WHITE)
@@ -64,10 +64,10 @@ class MicroChessEnv:
             bk_rank, bk_file = chess.square_rank(bk_square), chess.square_file(bk_square)
             
             distance = max(abs(wk_rank - bk_rank), abs(wk_file - bk_file))
-            value -= distance * 10.0
+            value -= distance * 0.01
             
             # Penalize Black king not on edge
             if bk_rank == 0 or bk_rank == 7 or bk_file == 0 or bk_file == 7:
-                value += 100.0
+                value += 0.1
                 
         return value

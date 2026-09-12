@@ -53,9 +53,9 @@ class NeuralMCTSPlanner(ChessMCTSPlanner):
     def evaluate(self, node):
         board = chess.Board(node.fen)
         if board.is_checkmate():
-            return 10000.0 if board.turn == chess.BLACK else -10000.0
+            return 1.0 if board.turn == chess.BLACK else -1.0
         if board.is_stalemate() or board.is_insufficient_material() or board.is_repetition() or board.is_fifty_moves():
-            return -10000.0
+            return -1.0
             
         tensor_state = self.env.encode_state(node.fen)
         with torch.no_grad():
@@ -167,7 +167,9 @@ def run_neural_assay(episodes=60):
             prev1 = mse_history[-2]
             curr = mse_history[-1]
             
-            if curr > prev1 and prev1 > prev2:
+            if curr > (prev1 * 10.0) and prev1 > 0.001:
+                print("  -> Plasticity: Relative Magnitude Bypass detected! Triggering TRAIN.")
+            elif curr > prev1 and prev1 > prev2:
                 print("  -> Plasticity: Twice-up regression detected. Triggering TRAIN.")
             else:
                 print("  -> Plasticity: Error stable/recovering. SKIPPING consolidation.")
@@ -187,4 +189,4 @@ def run_neural_assay(episodes=60):
             value_model.eval()
 
 if __name__ == "__main__":
-    run_neural_assay(episodes=60)
+    run_neural_assay(episodes=30)
