@@ -127,7 +127,7 @@ def run_neural_assay(episodes=60):
                board.push(random.choice(list(board.legal_moves)))
 
         while not board.is_game_over() and moves_made < 10:
-            best_move, target_q = planner.search_with_q(board.fen(), num_simulations=50)
+            best_move, target_q = planner.search_with_q(board.fen(), num_simulations=400)
             if best_move is None:
                 break
                 
@@ -187,6 +187,9 @@ def run_neural_assay(episodes=60):
                 loss.backward()
                 optimizer.step()
             value_model.eval()
+
+    torch.save(value_model.state_dict(), "chess_lora_weights.pt")
+    print("Saved trained weights to chess_lora_weights.pt")
 
 if __name__ == "__main__":
     run_neural_assay(episodes=30)

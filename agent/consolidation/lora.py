@@ -54,6 +54,9 @@ class AnalogicalReasoningLoRA:
         trainable_params = [p for p in self.world_model.parameters() if p.requires_grad]
         optimizer = optim.Adam(trainable_params, lr=lr)
         
+        # Implement learning rate decay to prevent "adapter shocks"
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+        
         self.world_model.train()
         for _ in range(epochs):
             optimizer.zero_grad()
@@ -65,6 +68,7 @@ class AnalogicalReasoningLoRA:
                 
             loss.backward()
             optimizer.step()
+            scheduler.step()
             
         self.world_model.eval()
         # Deactivate so base intuition is preserved until adapter is explicitly requested

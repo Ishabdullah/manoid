@@ -33,5 +33,12 @@ class CuriosityPolicy:
                 variances.append(var.item())
         world_model.train()
                 
+        max_var = max(variances)
+        
+        # Boredom Threshold: If we perfectly understand the state (uncertainty < 0.01),
+        # stop being curious and exploit what we know (which without extrinsic reward just means random/default).
+        if max_var < 0.01:
+            return random.randint(0, self.num_actions - 1)
+            
         # Return action with MAXIMUM uncertainty/disagreement
         return int(torch.argmax(torch.tensor(variances)).item())

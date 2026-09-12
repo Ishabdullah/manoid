@@ -66,7 +66,7 @@ class ChessMCTSPlanner:
                 # Black wants to minimize White's score
                 q_val = -q_val
                 
-            ucb_score = q_val + self.exploration_weight * 100 * math.sqrt(math.log(node.N) / child.N)
+            ucb_score = q_val + self.exploration_weight * math.sqrt(math.log(node.N) / child.N)
             if ucb_score > best_score:
                 best_score = ucb_score
                 best_child = child
