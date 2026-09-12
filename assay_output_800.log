@@ -1,0 +1,68 @@
+=== Phase 7: The Final Assay ===
+Environment: 5x5 Grid (25 states, sparse exploration challenge)
+Metric: Global Prediction MSE (Lower is better)
+
+
+--- Running Manoid Agent (Curiosity + Multi-Tier Consolidation) ---
+  [Manoid]   Step 50 | Global MSE: 0.5493
+  [Manoid] Plasticity: Insufficient history. Defaulting to Tier 2 consolidation.
+Routing 17 experiences to Tier 1 (Replay)
+Routing 30 experiences to Tier 2 (LoRA Adapter: 'Resistance')
+Routing 3 experiences to Tier 3 (Symbolic Rule)
+  [Manoid]   Step 100 | Global MSE: 0.1762
+  [Manoid] Plasticity: Insufficient history. Defaulting to Tier 2 consolidation.
+Routing 18 experiences to Tier 1 (Replay)
+Routing 30 experiences to Tier 2 (LoRA Adapter: 'Resistance')
+Routing 2 experiences to Tier 3 (Symbolic Rule)
+  [Manoid]   Step 150 | Global MSE: 0.2282
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 50 experiences to Tier 1 (Replay)
+  [Manoid]   Step 200 | Global MSE: 1.0638
+  [Manoid] Plasticity: Twice-up regression detected. Triggering Tier 2 consolidation.
+Routing 19 experiences to Tier 1 (Replay)
+Routing 30 experiences to Tier 2 (LoRA Adapter: 'Resistance')
+Routing 1 experiences to Tier 3 (Symbolic Rule)
+  [Manoid]   Step 250 | Global MSE: 0.9976
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 46 experiences to Tier 1 (Replay)
+Routing 4 experiences to Tier 3 (Symbolic Rule)
+  [Manoid]   Step 300 | Global MSE: 0.2309
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 50 experiences to Tier 1 (Replay)
+  [Manoid]   Step 350 | Global MSE: 0.2796
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 50 experiences to Tier 1 (Replay)
+  [Manoid]   Step 400 | Global MSE: 0.4814
+  [Manoid] Plasticity: Twice-up regression detected. Triggering Tier 2 consolidation.
+Routing 20 experiences to Tier 1 (Replay)
+Routing 30 experiences to Tier 2 (LoRA Adapter: 'Resistance')
+  [Manoid]   Step 450 | Global MSE: 0.1779
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 50 experiences to Tier 1 (Replay)
+  [Manoid]   Step 500 | Global MSE: 0.1894
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 50 experiences to Tier 1 (Replay)
+  [Manoid]   Step 550 | Global MSE: 0.1776
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 50 experiences to Tier 1 (Replay)
+  [Manoid]   Step 600 | Global MSE: 0.2554
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 50 experiences to Tier 1 (Replay)
+  [Manoid]   Step 650 | Global MSE: 0.2035
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 50 experiences to Tier 1 (Replay)
+  [Manoid]   Step 700 | Global MSE: 0.3344
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 50 experiences to Tier 1 (Replay)
+  [Manoid]   Step 750 | Global MSE: 0.2020
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 50 experiences to Tier 1 (Replay)
+  [Manoid]   Step 800 | Global MSE: 0.2252
+  [Manoid] Plasticity: Error stable/recovering. Skipping Tier 2 consolidation.
+Routing 50 experiences to Tier 1 (Replay)
+
+=== Final Results ===
+Baseline Final Error: 3.4023
+Manoid Final Error:   0.2252
+
+Victory! Manoid architecture is ~15.1x more sample efficient.
