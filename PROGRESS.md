@@ -112,10 +112,39 @@
     ```
 
 ## Phase 5 — Verification & Falsification
-**Status:** In Progress
+**Status:** Complete
 **Goal:** The agent verifies its own hypotheses before treating them as fact.
 
 ### Steps:
-- [ ] Architect: Define corroboration (e.g., testing the rule twice, or checking a secondary source).
-- [ ] Implementer: Introduce a false hypothesis. 
-- [ ] Verifier: Prove the agent tests it, rejects it based on environmental feedback, and excludes it from consolidation.
+- [x] Architect: Define corroboration (e.g., testing the rule twice, or checking a secondary source).
+  - *Findings:* Decided on Option B (Bayesian Updating in Episodic Cache). When a retrieved memory hypothesis is tested, its internal `confidence` score is updated (+ delta if it matches reality, - delta if it diverges). Only memories with high confidence (>0.9) will be candidates for slow semantic consolidation later.
+- [x] Implementer: Introduce a false hypothesis. 
+- [x] Verifier: Prove the agent tests it, rejects it based on environmental feedback, and excludes it from consolidation.
+  - *Output:*
+    ```
+    --- Phase 5: Live Verifier ---
+    Injecting Hypothesis A (True) and Hypothesis B (False) with confidence 0.5
+    
+    Agent tests Hypothesis A (Right)...
+    MSE between reality and Hypothesis A expectation: 0.000000
+    Hypothesis A corroborated! Confidence +0.45
+    
+    Agent tests Hypothesis B (Down)...
+    MSE between reality and Hypothesis B expectation: 0.126384
+    Hypothesis B falsified! Confidence -0.45
+    
+    Final Confidence Hypothesis A (True): 0.95
+    Final Confidence Hypothesis B (False): 0.05
+    Will Hypothesis A be sent to consolidation? Yes
+    Will Hypothesis B be sent to consolidation? No
+    
+    --- Live Verification Success! ---
+    ```
+
+## Phase 6 — Semantic Consolidation
+**Status:** In Progress
+**Goal:** Verified episodic knowledge becomes a durable, generalized rule.
+
+### Steps:
+- [ ] Research: Evaluate how to extract symbolic rules (program induction) or consolidate via LoRA without catastrophic forgetting.
+- [ ] Implementer: Run a batch of episodes. Confirm a generalized rule is extracted, and run a forgetting-check to prove previous behavior remains intact.

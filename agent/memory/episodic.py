@@ -78,7 +78,20 @@ class EpisodicMemory:
         retrieved_outcomes = self.outcomes[top_indices]
         retrieved_confidences = self.confidences[top_indices]
         
-        return retrieved_outcomes, retrieved_confidences, top_sims
+        return retrieved_outcomes, retrieved_confidences, top_sims, top_indices
+
+    def update_confidence(self, indices: torch.Tensor, delta: float):
+        """
+        Bayesian Updating mechanism (Phase 5).
+        Adjusts the confidence of specific memory entries based on environmental corroboration.
+        """
+        # Ensure indices are flattened if needed
+        idx_flat = indices.flatten()
+        current_conf = self.confidences[idx_flat]
+        
+        # Clamp confidence between 0.0 (completely falsified) and 1.0 (verified)
+        new_conf = torch.clamp(current_conf + delta, 0.0, 1.0)
+        self.confidences[idx_flat] = new_conf
 
     def save(self, filepath: str):
         """Persist memory buffer to disk."""
