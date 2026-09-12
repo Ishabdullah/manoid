@@ -35,10 +35,38 @@
     ```
 
 ## Phase 2 — Fast-Binding Episodic Memory
-**Status:** In Progress
+**Status:** Complete
 **Goal:** The model can instantly store one-shot experiences without retraining weights.
 
 ### Steps:
-- [ ] Architect: Design the Complementary Learning System episodic cache. Schema must capture [state, action, outcome, confidence].
-- [ ] Implementer: Build the memory store.
-- [ ] Verifier: Introduce a novel fact to the system. Prove that on the second query, the agent retrieves it from the episodic store instantly.
+- [x] Architect: Design the Complementary Learning System episodic cache. Schema must capture [state, action, outcome, confidence].
+- [x] Implementer: Build the memory store.
+- [x] Verifier: Introduce a novel fact to the system. Prove that on the second query, the agent retrieves it from the episodic store instantly.
+  - *Output:*
+    ```
+    --- Phase 2: Live Verifier ---
+    Initialized PyTorch Tensor Buffer Episodic Cache.
+    
+    Querying cache before storing...
+    Result before store: None
+    
+    Storing novel fact [state, action, outcome, confidence]...
+    Memory size after store: 1
+    
+    Querying cache after storing...
+    Similarity score: 1.0000
+    Retrieved confidence: 0.9900
+    MSE between stored and retrieved outcome: 0.000000
+    
+    --- Live Verification Success! ---
+    ```
+
+## Phase 3 — Environment & Causal World Model
+**Status:** In Progress
+**Goal:** A playground where actions have observable consequences, so the agent can test hypotheses.
+
+### Steps:
+- [ ] Research: Evaluate a minimal environment (e.g., MiniGrid, Crafter) vs. a custom symbolic grid.
+- [ ] Architect: Define how the agent interacts (do(X) interventions) and logs transitions.
+- [ ] Implementer: Wire the environment, log real transitions.
+- [ ] Verifier: Prove the agent's internal state tracking matches the environment's ground truth.
