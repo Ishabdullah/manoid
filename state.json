@@ -1,6 +1,1 @@
-{
-  "phase": 7,
-  "quota_used_hours": 0.0,
-  "last_checkpoint": "phase-7-complete",
-  "status": "done"
-}
+{"phase": 18, "episode": 45, "status": "done"}
