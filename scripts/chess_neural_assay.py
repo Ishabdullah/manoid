@@ -14,7 +14,7 @@ from scripts.chess_mcts_planner import ChessMCTSPlanner, ChessNode
 from agent.consolidation.lora import LoRALinear
 
 class ChessValueModel(nn.Module):
-    def __init__(self, input_dim=768):
+    def __init__(self, input_dim=837):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(input_dim, 256),
@@ -28,7 +28,7 @@ class ChessValueModel(nn.Module):
         self._lora_adapters = nn.ModuleDict()
         self._active_lora = None
 
-    def apply_lora_adapter(self, concept_name, rank=4):
+    def apply_lora_adapter(self, concept_name, rank=64):
         if concept_name in self._lora_adapters:
             return
         import copy
