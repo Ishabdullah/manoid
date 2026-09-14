@@ -18,7 +18,7 @@ def run_diagnostics():
     value_model.apply_lora_adapter("FullChess", rank=64)
     value_model.set_active_lora("FullChess")
     
-    ckpt_path = "manoid_v2_ckpt_1600.pt"
+    ckpt_path = "manoid_v2_ckpt_1700.pt"
     value_model.load_state_dict(torch.load(ckpt_path, map_location='cpu', weights_only=True), strict=False)
     value_model.eval()
     print(f"Loaded weights from {ckpt_path}")
@@ -37,8 +37,11 @@ def run_diagnostics():
     planner.GUMBEL_LOGGING_ENABLED = True # enable for printing
     
     game_configs = [
-        {"desc": "Game 1 (GM Book 1.e4 e5, Manoid=White)", "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2", "color": chess.WHITE},
-        {"desc": "Game 2 (GM Book 1.e4 c5, Manoid=Black)", "fen": "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2", "color": chess.BLACK},
+        {"desc": "Game 1 (Natural Start, Manoid=White)", "fen": chess.STARTING_FEN, "color": chess.WHITE},
+        {"desc": "Game 2 (Natural Start, Manoid=Black)", "fen": chess.STARTING_FEN, "color": chess.BLACK},
+        {"desc": "Game 3 (GM Book 1.e4 e5, Manoid=White)", "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2", "color": chess.WHITE},
+        {"desc": "Game 4 (GM Book 1.e4 c5, Manoid=Black)", "fen": "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2", "color": chess.BLACK},
+        {"desc": "Game 5 (Natural Start, Manoid=White)", "fen": chess.STARTING_FEN, "color": chess.WHITE},
     ]
     
     for g_idx, cfg in enumerate(game_configs, 1):
@@ -52,8 +55,8 @@ def run_diagnostics():
         
         pgn_game = chess.pgn.Game()
         pgn_game.headers["Event"] = f"Manoid Diagnostic {g_idx}"
-        pgn_game.headers["White"] = "Manoid (v2_ckpt_1600)" if agent_color == chess.WHITE else "Stockfish Skill 1"
-        pgn_game.headers["Black"] = "Stockfish Skill 1" if agent_color == chess.WHITE else "Manoid (v2_ckpt_1600)"
+        pgn_game.headers["White"] = "Manoid (v2_ckpt_1700)" if agent_color == chess.WHITE else "Stockfish Skill 1"
+        pgn_game.headers["Black"] = "Stockfish Skill 1" if agent_color == chess.WHITE else "Manoid (v2_ckpt_1700)"
         if cfg['fen'] != chess.STARTING_FEN:
             pgn_game.headers["SetUp"] = "1"
             pgn_game.headers["FEN"] = cfg['fen']
@@ -63,7 +66,7 @@ def run_diagnostics():
         manoid_turn_count = 0
         moves_history = []
         
-        while not board.is_game_over() and len(moves_history) < 30:
+        while not board.is_game_over() and len(moves_history) < 150:
             is_manoid_turn = (board.turn == agent_color)
             fen_before = board.fen()
             

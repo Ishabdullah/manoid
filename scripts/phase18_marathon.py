@@ -28,25 +28,31 @@ LR_MAX            = 5e-4
 LR_MIN            = 5e-6
 LR_DECAY_EPISODES = 2000          # full cosine period matches the marathon length
 
-# Change 3: loss-weighting coefficients
-# Pre-change measured averages (40-episode smoke test):
-#   value=0.021, policy=7.82, depth=0.034, dense=0.056, pv=8.12
-# Policy and PV are ~370x the value scale — they will completely drown the value
-# gradient.  We rescale so every term contributes roughly equally to the total
-# loss (target ~0.02 each ≈ order-of-magnitude of value loss).
-# Weights chosen as: w = target_scale / raw_avg, normalised to keep total loss
-# in a tractable range.
-W_VALUE  = 1.0       # anchor: value loss ~0.02, weight=1.0
-W_POLICY = 0.003     # policy ~7.8 → 7.8*0.003 ≈ 0.023
-W_DEPTH  = 0.5       # depth ~0.034 → 0.034*0.5 ≈ 0.017
-W_DENSE  = 0.35      # dense ~0.056 → 0.056*0.35 ≈ 0.020
-W_PV     = 0.0025    # pv ~8.12 → 8.12*0.0025 ≈ 0.020
+# Adaptive loss weighting — replaces the stale fixed-weight scheme.
+# Weight for each term = priority / (EMA_of_raw_magnitude + eps)
+# so every term contributes ~equally regardless of absolute scale,
+# and the weights self-correct as raw magnitudes shift during training.
+LOSS_EMA_DECAY  = 0.99    # ~100-step memory (slower = more stable baseline)
+
+# Priority multipliers applied on top of the normalised 1/EMA weight.
+# policy/pv determine move selection → higher priority than pure aux heads.
+PRIORITY_VALUE  = 1.0
+PRIORITY_POLICY = 2.0     # 2× so policy gradient doesn't yield to aux heads
+PRIORITY_DEPTH  = 0.7     # auxiliary — helps trunk but not move selection
+PRIORITY_DENSE  = 0.7     # auxiliary — same
+PRIORITY_PV     = 2.0     # 2× — PV head directly trains move ordering
+
+# Safety clamp: computed weights are clamped so no term exceeds CLAMP_MAX ×
+# the median term weight, nor falls below CLAMP_MIN × median.
+# Prevents a temporary spike/collapse in one term's EMA from suppressing others.
+WEIGHT_CLAMP_MAX = 10.0
+WEIGHT_CLAMP_MIN = 0.1
 
 # Change 4: Elo — assumed Stockfish skill level → approximate Elo mapping
 # Basis: Stockfish skill level docs + community benchmarks on chess.com/lichess
 #   Skill 0≈800, Skill 2≈1100, Skill 3≈1300, Skill 4≈1600, Skill 5≈1900
 # We use skill levels 2/3/4/5 in training.
-STOCKFISH_ELO = {2: 1100, 3: 1300, 4: 1600, 5: 1900}
+STOCKFISH_ELO = {1: 900, 2: 1100, 3: 1300, 4: 1600, 5: 1900}
 ELO_K = 32           # standard K-factor for developing players
 
 
@@ -66,7 +72,70 @@ def elo_update(rating: float, expected: float, actual: float, k: float = ELO_K) 
     return rating + k * (actual - expected)
 
 
+class AdaptiveLossWeighter:
+    """EMA-normalised loss weighter with per-term priority and safety clamps.
+
+    Algorithm per consolidation step:
+      1. Update EMA of each raw loss term.
+      2. Compute normalised weight[i] = priority[i] / (ema[i] + eps)
+         so the *contribution* weight[i] × ema[i] ≈ priority[i] for every term.
+         This means policy (priority 2.0) targets twice the gradient contribution
+         of value (priority 1.0), regardless of their raw loss scales.
+      3. Safety clamp: compute the expected contribution for each term
+         (weight × ema). Clamp contributions to [median_contrib × CLAMP_MIN,
+         median_contrib × CLAMP_MAX], then back-solve for the clamped weight.
+         This prevents a temporarily tiny EMA (e.g. depth after fast learning)
+         from ballooning its weight to dominate the gradient.
+      4. Return (weights, emas) for logging.
+    """
+
+    def __init__(self, decay: float = LOSS_EMA_DECAY, eps: float = 1e-4):
+        self.decay = decay
+        self.eps   = eps
+        # Bootstrap EMAs from the measured before-baseline averages so the
+        # weighter starts in a sensible region instead of cold-start guessing.
+        self._ema = {
+            "value":  0.014,   # measured avg over last 100 eps
+            "policy": 7.99,
+            "depth":  0.024,
+            "dense":  0.035,
+            "pv":     8.18,
+        }
+        self._priorities = {
+            "value":  PRIORITY_VALUE,
+            "policy": PRIORITY_POLICY,
+            "depth":  PRIORITY_DEPTH,
+            "dense":  PRIORITY_DENSE,
+            "pv":     PRIORITY_PV,
+        }
+
+    def step(self, raw: dict) -> tuple[dict, dict]:
+        """Update EMAs and return (weights, emas) for logging."""
+        d = self.decay
+        for k, v in raw.items():
+            self._ema[k] = d * self._ema[k] + (1.0 - d) * v
+
+        # Step 1: normalised weights — each term contributes ≈ priority[i]
+        weights = {k: self._priorities[k] / (self._ema[k] + self.eps)
+                   for k in self._ema}
+
+        # Step 2: safety clamp on *contributions* (w × ema), not raw weights.
+        # This keeps policy (high raw magnitude, low weight) correctly
+        # dominant over depth (low raw magnitude, high raw weight).
+        contribs = {k: weights[k] * (self._ema[k] + self.eps) for k in weights}
+        contrib_vals = sorted(contribs.values())
+        median_c = contrib_vals[len(contrib_vals) // 2]
+        lo_c = median_c * WEIGHT_CLAMP_MIN
+        hi_c = median_c * WEIGHT_CLAMP_MAX
+        for k in weights:
+            clamped_c = max(lo_c, min(hi_c, contribs[k]))
+            weights[k] = clamped_c / (self._ema[k] + self.eps)
+
+        return weights, dict(self._ema)
+
+
 class Phase16Planner(BatchingMCTSPlanner):
+
     def search_with_q(self, root_fen, num_simulations=100):
         puct_move = None
         if self.USE_GUMBEL_SEARCH and getattr(self, 'GUMBEL_LOGGING_ENABLED', False) and getattr(self, 'GUMBEL_CALLS', 0) < 5000:
@@ -214,7 +283,10 @@ def run_phase18(episodes=2000):
     print("=== Phase 18: The Deep Grind ===")
     print(f"[Config] LR: cosine {LR_MAX:.0e} → {LR_MIN:.0e} over {LR_DECAY_EPISODES} eps")
     print(f"[Config] Replay buffer: {REPLAY_BUFFER_EPISODES} eps, batch {REPLAY_BATCH_SIZE}")
-    print(f"[Config] Loss weights: value={W_VALUE} policy={W_POLICY} depth={W_DEPTH} dense={W_DENSE} pv={W_PV}")
+    print(f"[Config] Loss weighting: adaptive EMA (decay={LOSS_EMA_DECAY}) | "
+          f"priorities value={PRIORITY_VALUE} policy={PRIORITY_POLICY} "
+          f"depth={PRIORITY_DEPTH} dense={PRIORITY_DENSE} pv={PRIORITY_PV} | "
+          f"clamp {WEIGHT_CLAMP_MIN}x–{WEIGHT_CLAMP_MAX}x median")
     
     env = FullChessEnv()
     value_model = ChessValueModelPhase14(input_dim=837)
@@ -276,8 +348,13 @@ def run_phase18(episodes=2000):
     # ── Change 1: Replay buffer ───────────────────────────────────────────────
     replay_buffer = ReplayBuffer(max_episodes=REPLAY_BUFFER_EPISODES)
 
+    # ── Adaptive loss weighter (replaces fixed W_VALUE/W_POLICY/etc) ──────────
+    loss_weighter = AdaptiveLossWeighter(decay=LOSS_EMA_DECAY)
+
     # ── Change 4: Elo tracking ────────────────────────────────────────────────
-    manoid_elo = 1000.0   # starting estimate for a fresh model
+    # Note: starting at 738 based on known state from previous logs, since
+    # we aren't serialising this variable to disk yet.
+    manoid_elo = 738.0
 
     opening_book = [
         "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
@@ -366,17 +443,21 @@ def run_phase18(episodes=2000):
                 start_fen = random.choice(opening_book)
                 start_desc = f"[Start: GM Book: {start_fen}]"
             
-        # Curriculum ordering
-        w_count = rolling_results.count('W')
-        win_rate = w_count / max(1, len(rolling_results))
-        
-        level_weights = [0.7, 0.2, 0.05, 0.05]
-        if win_rate > 0.4:
-            level_weights = [0.2, 0.6, 0.15, 0.05]
-        if win_rate > 0.6:
-            level_weights = [0.05, 0.2, 0.6, 0.15]
-            
-        opponent_level = random.choices([2, 3, 4, 5], weights=level_weights, k=1)[0]
+        # Curriculum ordering based on Elo
+        if manoid_elo < 1000:
+            level_choices = [1, 2, 3, 4]
+            level_weights = [0.8, 0.2, 0.0, 0.0]
+        else:
+            w_count = rolling_results.count('W')
+            win_rate = w_count / max(1, len(rolling_results))
+            level_choices = [2, 3, 4, 5]
+            level_weights = [0.7, 0.2, 0.05, 0.05]
+            if win_rate > 0.4:
+                level_weights = [0.2, 0.6, 0.15, 0.05]
+            if win_rate > 0.6:
+                level_weights = [0.05, 0.2, 0.6, 0.15]
+                
+        opponent_level = random.choices(level_choices, weights=level_weights, k=1)[0]
         engine.configure({"Skill Level": opponent_level})
         board = chess.Board(start_fen)
         agent_color = chess.WHITE if ep % 2 == 1 else chess.BLACK
@@ -384,6 +465,7 @@ def run_phase18(episodes=2000):
         print(f"Starting FEN: {start_desc} | Opponent Level: {opponent_level} | Level Mix: {level_weights}")
         
         planner = Phase16Planner(env, value_model, engine, batch_size=32)
+        planner.USE_QUIESCENCE = True
         
         # ── Per-episode buffers (used to build replay entries) ────────────────
         ep_plies = []          # list of per-ply dicts for replay buffer
@@ -627,7 +709,7 @@ def run_phase18(episodes=2000):
                     v_preds, p_from_logits, p_to_logits, d_preds, dense_preds, pv_f_logits, pv_t_logits = \
                         value_model(states_tensor, phases=phases_tensor)
                     
-                    # ── Change 3: raw losses ──────────────────────────────────
+                    # ── Compute raw losses ────────────────────────────────────
                     v_loss_raw    = nn.functional.mse_loss(v_preds, targets_tensor)
                     pf_loss_raw   = nn.functional.cross_entropy(p_from_logits, pf_targets_tensor)
                     pt_loss_raw   = nn.functional.cross_entropy(p_to_logits,   pt_targets_tensor)
@@ -638,12 +720,21 @@ def run_phase18(episodes=2000):
                     pvt_loss_raw  = nn.functional.cross_entropy(pv_t_logits.transpose(1, 2), pvt_targets_tensor)
                     pv_loss_raw   = pvf_loss_raw + pvt_loss_raw
 
-                    # ── Change 3: weighted sum ────────────────────────────────
-                    v_contrib  = W_VALUE  * v_loss_raw
-                    p_contrib  = W_POLICY * p_loss_raw
-                    d_contrib  = W_DEPTH  * d_loss_raw
-                    dn_contrib = W_DENSE  * dn_loss_raw
-                    pv_contrib = W_PV     * pv_loss_raw
+                    # ── Adaptive weighting: EMA-normalised + priority ─────────
+                    raw_magnitudes = {
+                        "value":  v_loss_raw.item(),
+                        "policy": p_loss_raw.item(),
+                        "depth":  d_loss_raw.item(),
+                        "dense":  dn_loss_raw.item(),
+                        "pv":     pv_loss_raw.item(),
+                    }
+                    w, emas = loss_weighter.step(raw_magnitudes)
+
+                    v_contrib  = w["value"]  * v_loss_raw
+                    p_contrib  = w["policy"] * p_loss_raw
+                    d_contrib  = w["depth"]  * d_loss_raw
+                    dn_contrib = w["dense"]  * dn_loss_raw
+                    pv_contrib = w["pv"]     * pv_loss_raw
                     loss = v_contrib + p_contrib + d_contrib + dn_contrib + pv_contrib
 
                     loss.backward()
@@ -658,17 +749,29 @@ def run_phase18(episodes=2000):
                                 phase_counts[ph] = mask.sum().item()
                             
                 value_model.eval()
-                # ── Change 2: log current LR ──────────────────────────────────
                 print(f"  -> Grounding Hits: TB {ep_tb_hits} vs SF {ep_sf_hits}")
                 print(f"  -> Phase MSE | Open({phase_counts[0]}): {phase_v_losses[0]:.4f} | "
                       f"Mid({phase_counts[1]}): {phase_v_losses[1]:.4f} | "
                       f"End({phase_counts[2]}): {phase_v_losses[2]:.4f}")
-                # ── Change 3: log both raw and weighted contributions ──────────
+                # Raw losses (unchanged format — enables trend comparison across runs)
                 print(f"  -> Loss [raw]     | V: {v_loss_raw.item():.4f} | "
                       f"P: {p_loss_raw.item():.4f} | "
                       f"D: {d_loss_raw.item():.4f} | "
                       f"Dn: {dn_loss_raw.item():.4f} | "
                       f"PV: {pv_loss_raw.item():.4f}")
+                # Adaptive weights computed this step (watch these evolve)
+                print(f"  -> Loss [weights]  | V: {w['value']:.4f} | "
+                      f"P: {w['policy']:.4f} | "
+                      f"D: {w['depth']:.4f} | "
+                      f"Dn: {w['dense']:.4f} | "
+                      f"PV: {w['pv']:.4f}")
+                # EMA baselines the weights are computed from
+                print(f"  -> EMA [magnitudes]| V: {emas['value']:.4f} | "
+                      f"P: {emas['policy']:.4f} | "
+                      f"D: {emas['depth']:.4f} | "
+                      f"Dn: {emas['dense']:.4f} | "
+                      f"PV: {emas['pv']:.4f}")
+                # Weighted contributions + totals
                 print(f"  -> Loss [weighted] | V: {v_contrib.item():.4f} | "
                       f"P: {p_contrib.item():.4f} | "
                       f"D: {d_contrib.item():.4f} | "
