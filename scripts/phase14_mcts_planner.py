@@ -214,11 +214,11 @@ class BatchingMCTSPlanner:
         for move in legal_moves:
             prior = root.move_probs.get(move, 1e-8)
             noise = -math.log(-math.log(random.uniform(0.0001, 0.9999)))
-            score = math.log(prior) + noise
+            score = math.log(prior) + 0.3 * noise
             gumbel_scores.append((score, move))
             
         # 3. Select Top-K actions
-        K = min(8, len(legal_moves))
+        K = min(16, len(legal_moves))
         gumbel_scores.sort(reverse=True, key=lambda x: x[0])
         top_k_moves = [m for s, m in gumbel_scores[:K]]
         
@@ -512,15 +512,79 @@ class BatchingMCTSPlanner:
                         
                 sf_vals.append(best_minimax)
             else:
-                info = self.engine.analyse(board, chess.engine.Limit(depth=1))
-                score = info["score"].white()
-                if score.is_mate():
-                    cp = 10000 if score.mate() > 0 else -10000
+                if getattr(self, 'USE_QUIESCENCE', False):
+                    self.QUIESCENCE_CALLS = getattr(self, 'QUIESCENCE_CALLS', 0) + 1
+                    
+                    def _q_search(b, d, alpha, beta):
+                        is_w = b.turn == chess.WHITE
+                        if b.is_game_over():
+                            if b.is_checkmate(): return -1.0 if is_w else 1.0
+                            return 0.0
+                            
+                        # Stand pat
+                        ri = self.engine.analyse(b, chess.engine.Limit(depth=1))
+                        sc = ri["score"].white()
+                        cp = 10000 if sc.is_mate() and sc.mate() > 0 else (-10000 if sc.is_mate() else sc.score())
+                        stand_pat = max(-1.0, min(1.0, cp / 1000.0))
+                        
+                        if d >= 4: return stand_pat
+                        
+                        in_check = b.is_check()
+                        if not in_check:
+                            if is_w:
+                                alpha = max(alpha, stand_pat)
+                                if alpha >= beta: return alpha
+                            else:
+                                beta = min(beta, stand_pat)
+                                if beta <= alpha: return beta
+                                
+                        caps = []
+                        for m in b.legal_moves:
+                            if in_check or b.is_capture(m) or b.gives_check(m):
+                                caps.append(m)
+                                
+                        if not caps: return stand_pat
+                        
+                        best_val = stand_pat if not in_check else (-float('inf') if is_w else float('inf'))
+                        for m in caps:
+                            b.push(m)
+                            val = _q_search(b, d + 1, alpha, beta)
+                            b.pop()
+                            if is_w:
+                                best_val = max(best_val, val)
+                                alpha = max(alpha, best_val)
+                            else:
+                                best_val = min(best_val, val)
+                                beta = min(beta, best_val)
+                            if alpha >= beta: break
+                        return best_val
+
+                    # Get static first to compare
+                    info_static = self.engine.analyse(board, chess.engine.Limit(depth=1))
+                    sc_static = info_static["score"].white()
+                    cp_s = 10000 if sc_static.is_mate() and sc_static.mate() > 0 else (-10000 if sc_static.is_mate() else sc_static.score())
+                    static_val = max(-1.0, min(1.0, cp_s / 1000.0))
+                    
+                    has_forcing = any(board.is_capture(m) or board.gives_check(m) for m in board.legal_moves)
+                    if has_forcing:
+                        q_val = _q_search(board, 0, -float('inf'), float('inf'))
+                        if abs(q_val - static_val) > 0.1:
+                            self.QUIESCENCE_HITS = getattr(self, 'QUIESCENCE_HITS', 0) + 1
+                            if getattr(self, 'GUMBEL_LOGGING_ENABLED', False):
+                                print(f"[Quiescence] Leaf changed: {static_val:.3f} -> {q_val:.3f} (Hits: {self.QUIESCENCE_HITS}/{self.QUIESCENCE_CALLS})")
+                        sf_vals.append(q_val)
+                    else:
+                        sf_vals.append(static_val)
                 else:
-                    cp = score.score()
-                
-                norm_score = max(-1.0, min(1.0, cp / 1000.0))
-                sf_vals.append(norm_score)
+                    info = self.engine.analyse(board, chess.engine.Limit(depth=1))
+                    score = info["score"].white()
+                    if score.is_mate():
+                        cp = 10000 if score.mate() > 0 else -10000
+                    else:
+                        cp = score.score()
+                    
+                    norm_score = max(-1.0, min(1.0, cp / 1000.0))
+                    sf_vals.append(norm_score)
             
         for idx, nn_val, sf_val in zip(node_indices, v_preds, sf_vals):
             if self.USE_2PLY_LOOKAHEAD:
