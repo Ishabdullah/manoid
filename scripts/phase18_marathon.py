@@ -15,6 +15,8 @@ from typing import List
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from agent.environment.full_chess_env import FullChessEnv
 from scripts.phase14_mcts_planner import ChessValueModelPhase14, BatchingMCTSPlanner, ChessNodePhase14
+from agent.core_model.world_model import WorldModel
+from agent.memory.episodic import EpisodicMemory
 
 # ─── CONFIG CONSTANTS ──────────────────────────────────────────────────────────
 REPLAY_BUFFER_EPISODES = 200      # Change 1: keep last N episodes in replay buffer
@@ -290,6 +292,35 @@ def run_phase18(episodes=2000):
     
     env = FullChessEnv()
     value_model = ChessValueModelPhase14(input_dim=837)
+
+    # ── Complex phase-space WorldModel (new architecture) ─────────────────────
+    # Runs alongside ChessValueModelPhase14.  The complex latent representations
+    # are routed through the MCTS planner's Path A for π² spike detection and
+    # HRR episodic storage; the legacy value model continues to provide scalar v.
+    world_model = WorldModel(
+        input_dim=12 * 8 * 8,   # 12 channels × 8×8 complex freq bins (flat)
+        action_dim=16,
+        latent_dim=512,
+        num_heads=3,
+    )
+    episodic_memory = EpisodicMemory(
+        state_dim=512,   # matches world_model.latent_dim
+        action_dim=16,
+        max_size=50000,
+    )
+    # Load complex world model checkpoint if available
+    if os.path.exists("world_model_ckpt.pt"):
+        try:
+            world_model.load_state_dict(torch.load("world_model_ckpt.pt", map_location='cpu'))
+            print("Loaded existing WorldModel checkpoint from world_model_ckpt.pt")
+        except Exception as e:
+            print(f"Could not load WorldModel checkpoint: {e}. Starting fresh.")
+    if os.path.exists("episodic_memory.pt"):
+        try:
+            episodic_memory.load("episodic_memory.pt")
+            print(f"Loaded HRR episodic memory: {episodic_memory.size} entries.")
+        except Exception as e:
+            print(f"Could not load episodic memory: {e}. Starting fresh.")
     
     value_model.apply_lora_adapter("FullChess", rank=64)
     value_model.set_active_lora("FullChess")
@@ -339,6 +370,9 @@ def run_phase18(episodes=2000):
     trainable_params = [p for p in value_model.parameters() if p.requires_grad]
     optimizer = optim.Adam(trainable_params, lr=current_lr)
     print(f"[Config] Initial LR = {current_lr:.2e}")
+
+    # ── WorldModel optimizer (complex encoder — small fixed LR) ───────────────
+    wm_optimizer = optim.Adam(world_model.parameters(), lr=1e-4)
 
     wins = 0
     losses = 0
@@ -393,7 +427,8 @@ def run_phase18(episodes=2000):
         
         if len(recent_state_dicts) >= 2 and random.random() < ACTIVE_LEARNING_RATIO:
             candidates = opening_book + [chess.STARTING_FEN]
-            candidate_tensors = torch.cat([env.encode_state(f) for f in candidates], dim=0)
+            # encode_state_real() for ChessValueModelPhase14 (needs float32)
+            candidate_tensors = torch.cat([env.encode_state_real(f) for f in candidates], dim=0)
             candidate_phases = []
             for f in candidates:
                 rb = chess.Board(f)
@@ -464,7 +499,9 @@ def run_phase18(episodes=2000):
         desc = "White" if agent_color == chess.WHITE else "Black"
         print(f"Starting FEN: {start_desc} | Opponent Level: {opponent_level} | Level Mix: {level_weights}")
         
-        planner = Phase16Planner(env, value_model, engine, batch_size=32)
+        planner = Phase16Planner(env, value_model, engine, batch_size=32,
+                                 world_model=world_model,
+                                 episodic_memory=episodic_memory)
         planner.USE_QUIESCENCE = True
         
         # ── Per-episode buffers (used to build replay entries) ────────────────
@@ -486,13 +523,39 @@ def run_phase18(episodes=2000):
                 if best_move is None:
                     break
                     
-                tensor_state = env.encode_state(board.fen())
+                # encode_state_real → float32 for ChessValueModelPhase14
+                tensor_state = env.encode_state_real(board.fen())
+                # encode_state → cfloat for WorldModel (complex phase-space)
+                complex_spectrum = env.encode_state(board.fen())
+
                 with torch.no_grad():
                     v_pred, p_from, p_to, d_pred, dense_pred, _, _ = value_model(tensor_state, phases=torch.tensor([curr_phase], dtype=torch.long))
                     raw_pred = v_pred.item()
-                
+
                 loss_val = (raw_pred - target_q) ** 2
                 ep_mse_sum += loss_val
+
+                # ── WorldModel: train complex encoder on this position ─────────
+                # Predict the next complex latent state for the chosen move,
+                # then take a gradient step to reduce complex MSE.
+                # This runs on top of MCTS rather than replacing it.
+                try:
+                    world_model.train()
+                    wm_optimizer.zero_grad()
+                    z_now = world_model.encode(complex_spectrum)   # (1, 512) cfloat
+                    from scripts.phase14_mcts_planner import _encode_move_cfloat
+                    a_c = _encode_move_cfloat(best_move, action_dim=16)
+                    z_next_pred = world_model.predict_next(z_now, a_c)  # (1, 512) cfloat
+                    # Target: encode the actual next position
+                    board.push(best_move)
+                    z_next_actual = world_model.encode(env.encode_state(board.fen()))
+                    board.pop()
+                    wm_loss = ((z_next_pred - z_next_actual.detach()).abs() ** 2).mean()
+                    wm_loss.backward()
+                    wm_optimizer.step()
+                    world_model.eval()
+                except Exception:
+                    world_model.eval()  # non-critical; never break the main loop
                 
                 # Soft policy targets & PV auxiliary head
                 info = engine.analyse(board, chess.engine.Limit(depth=1), multipv=5)
@@ -593,7 +656,8 @@ def run_phase18(episodes=2000):
                 ENABLE_MIRROR = True
                 if ENABLE_MIRROR:
                     mirrored_board = board.transform(chess.flip_horizontal)
-                    mirrored_tensor_state = env.encode_state(mirrored_board.fen())
+                    # encode_state_real for the replay buffer (ChessValueModelPhase14)
+                    mirrored_tensor_state = env.encode_state_real(mirrored_board.fen())
                     
                     mirrored_soft_target_from = torch.zeros(64, dtype=torch.float32)
                     mirrored_soft_target_to = torch.zeros(64, dtype=torch.float32)
@@ -793,6 +857,10 @@ def run_phase18(episodes=2000):
             print(f"Average MSE over last 25 episodes: {avg_mse_25:.4f}")
             print(f"Replay Buffer: {replay_buffer.num_examples} examples / {replay_buffer.num_episodes} episodes")
             print(f"Estimated Elo: {manoid_elo:.0f}  |  LR: {current_lr:.2e}")
+            # Save complex WorldModel and HRR episodic memory
+            torch.save(world_model.state_dict(), "world_model_ckpt.pt")
+            episodic_memory.save("episodic_memory.pt")
+            print(f"WorldModel checkpoint saved. HRR memory: {episodic_memory.size} entries.")
             print("----------------------------------------\n")
             wins = 0
             losses = 0

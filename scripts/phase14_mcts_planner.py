@@ -4,9 +4,45 @@ import torch
 import torch.nn as nn
 import chess
 import chess.engine
-from typing import List
+from typing import List, Optional
 
 from agent.consolidation.lora import LoRALinear
+
+# ---------------------------------------------------------------------------
+# Complex Tensor MCTS Bridge
+# ---------------------------------------------------------------------------
+# Enables the MCTS engine to natively route complex tensors between
+# Environment → WorldModel → EpisodicMemory without flattening.
+#
+# When a WorldModel (complex-valued) is attached, evaluate_batch() will:
+#   1. Encode the board spectrum from FullChessEnv.encode_state() → cfloat
+#   2. Pass it through WorldModel.encode() → complex latent z
+#   3. Compute harmonic resonance uncertainty via predict_ensemble()
+#   4. Augment the node's move_probs with π² spike detection
+#   5. Optionally store (z, action, z_next, confidence) in EpisodicMemory
+#
+# The complex tensors are never flattened to real until the final scalar
+# value is read from the legacy value head (which accepts encode_state_real()).
+
+_PI2 = math.pi ** 2
+
+
+def _encode_move_cfloat(move: chess.Move, action_dim: int = 16,
+                        device: str = 'cpu') -> torch.Tensor:
+    """
+    Encode a chess.Move as a cfloat action tensor of shape (1, action_dim).
+    Combines from_square and to_square into complex phasors so the MCTS
+    can pass moves directly to the WorldModel's ComplexPredictor.
+    """
+    a = torch.zeros(1, action_dim, dtype=torch.cfloat, device=device)
+    from_phase = _PI2 * move.from_square / 64.0
+    to_phase   = _PI2 * move.to_square   / 64.0
+    a[0, 0] = complex(math.cos(from_phase), math.sin(from_phase))
+    a[0, 1] = complex(math.cos(to_phase),   math.sin(to_phase))
+    if move.promotion is not None:
+        promo_phase = _PI2 * move.promotion / 6.0
+        a[0, 2] = complex(math.cos(promo_phase), math.sin(promo_phase))
+    return a
 
 class ChessValueModelPhase14(nn.Module):
     def __init__(self, input_dim=837):
@@ -127,12 +163,16 @@ class ChessNodePhase14:
 
 
 class BatchingMCTSPlanner:
-    def __init__(self, env, value_model, engine, batch_size=32):
+    def __init__(self, env, value_model, engine, batch_size=32,
+                 world_model=None, episodic_memory=None):
         self.env = env
         self.value_model = value_model
         self.engine = engine
         self.exploration_weight = math.sqrt(2)
         self.batch_size = batch_size
+        # Complex phase-space routing modules (optional)
+        self.world_model    = world_model      # ComplexEncoder + predictors
+        self.episodic_memory = episodic_memory # HRR episodic buffer
 
     USE_GUMBEL_SEARCH = True
 
@@ -393,9 +433,75 @@ class BatchingMCTSPlanner:
                 
         if not fens_to_eval:
             return values
-            
-        tensor_states = torch.cat([self.env.encode_state(fen) for fen in fens_to_eval], dim=0)
-        
+
+        # ------------------------------------------------------------------
+        # Path A: Complex phase-space routing through WorldModel
+        # Routes cfloat tensors between Environment → WorldModel → Memory
+        # without flattening.
+        # ------------------------------------------------------------------
+        complex_latents: List[Optional[torch.Tensor]] = [None] * len(fens_to_eval)
+        resonance_bonuses: List[float] = [0.0] * len(fens_to_eval)
+
+        if self.world_model is not None:
+            with torch.no_grad():
+                for idx, fen in enumerate(fens_to_eval):
+                    # 1. Encode board as complex frequency spectrum
+                    z_spectrum = self.env.encode_state(fen)    # (1, 12, 8, 8) cfloat
+
+                    # 2. Encode into complex latent space
+                    z = self.world_model.encode(z_spectrum)    # (1, D) cfloat
+                    complex_latents[idx] = z
+
+                    # 3. Compute harmonic resonance for each legal move
+                    node = nodes[node_indices[idx]]
+                    board = chess.Board(fen)
+                    legal_moves = list(board.legal_moves)
+
+                    move_res_scores = []
+                    for move in legal_moves:
+                        a_cfloat = _encode_move_cfloat(
+                            move, action_dim=self.world_model.action_dim)
+                        preds = self.world_model.predict_ensemble(z, a_cfloat)
+                        # Phase variance as resonance proxy
+                        angles   = preds.angle()
+                        phase_var = angles.var(dim=0).mean().item()
+                        move_res_scores.append((move, phase_var))
+
+                    # 4. Detect π² spikes and update move_probs with bonus
+                    spike_threshold = _PI2 / max(1, len(move_res_scores))
+                    total_bonus = 0.0
+                    for move, res in move_res_scores:
+                        if res > spike_threshold:
+                            bonus = res / (_PI2 + 1e-8)
+                            node.move_probs[move] = (
+                                node.move_probs.get(move, 1e-8) + bonus)
+                            total_bonus += bonus
+                    resonance_bonuses[idx] = total_bonus
+
+                    # 5. Store complex latent in HRR episodic memory (if attached)
+                    if self.episodic_memory is not None and node.parent is not None:
+                        try:
+                            # Use a dummy outcome = z itself and confidence from resonance
+                            conf = min(1.0, total_bonus / (_PI2 + 1e-8) + 0.1)
+                            # Need a move for the action; use the node's own move
+                            if node.move is not None:
+                                a_cfloat = _encode_move_cfloat(
+                                    node.move, action_dim=self.world_model.action_dim)
+                                self.episodic_memory.store(
+                                    state=z.squeeze(0),
+                                    action=a_cfloat.squeeze(0),
+                                    outcome=z.squeeze(0),  # placeholder; updated after game
+                                    confidence=torch.tensor([conf])
+                                )
+                        except Exception:
+                            pass  # Memory store is non-critical
+
+        # ------------------------------------------------------------------
+        # Path B: Legacy real-tensor value model (always runs for scalar v)
+        # ------------------------------------------------------------------
+        tensor_states = torch.cat(
+            [self.env.encode_state_real(fen) for fen in fens_to_eval], dim=0)
+
         phases = []
         for fen in fens_to_eval:
             board = chess.Board(fen)
@@ -407,14 +513,15 @@ class BatchingMCTSPlanner:
             else:
                 phases.append(2)
         phases_tensor = torch.tensor(phases, dtype=torch.long)
-        
+
         with torch.no_grad():
-            v_preds, p_from_logits, p_to_logits, _, _, _, _ = self.value_model(tensor_states, phases=phases_tensor)
+            v_preds, p_from_logits, p_to_logits, _, _, _, _ = self.value_model(
+                tensor_states, phases=phases_tensor)
             v_preds = v_preds.squeeze(-1).tolist()
             if isinstance(v_preds, float):
                 v_preds = [v_preds]
             p_from_probs = torch.softmax(p_from_logits, dim=-1).cpu().numpy()
-            p_to_probs = torch.softmax(p_to_logits, dim=-1).cpu().numpy()
+            p_to_probs   = torch.softmax(p_to_logits,   dim=-1).cpu().numpy()
                 
         sf_vals = []
         for i, fen in enumerate(fens_to_eval):
