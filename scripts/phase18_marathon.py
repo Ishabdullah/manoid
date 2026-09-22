@@ -22,6 +22,12 @@ from agent.memory.episodic import EpisodicMemory
 REPLAY_BUFFER_EPISODES = 200      # Change 1: keep last N episodes in replay buffer
 REPLAY_BATCH_SIZE      = 256      # Change 1: examples sampled per consolidation step
 
+# ── WorldModel bonus ablation ──────────────────────────────────────────────────
+# Set to False to run without π² resonance affecting move selection (Path A
+# still runs for memory/logging, but bonuses are not written to move_probs).
+# Flip this one constant to produce Run A (False) vs Run B (True) results.
+USE_WORLD_MODEL_BONUS = True
+
 # Change 2: LR schedule — cosine decay from LR_MAX → LR_MIN over LR_DECAY_EPISODES
 # Rationale: cosine gives a smooth, gradual decay that avoids sudden LR drops that
 # can destabilise training.  Steps every episode; restarts are NOT used so the
@@ -501,15 +507,24 @@ def run_phase18(episodes=2000):
         
         planner = Phase16Planner(env, value_model, engine, batch_size=32,
                                  world_model=world_model,
-                                 episodic_memory=episodic_memory)
+                                 episodic_memory=episodic_memory,
+                                 use_world_model_bonus=USE_WORLD_MODEL_BONUS)
         planner.USE_QUIESCENCE = True
-        
+
         # ── Per-episode buffers (used to build replay entries) ────────────────
         ep_plies = []          # list of per-ply dicts for replay buffer
         ep_mse_sum = 0.0
         moves_made = 0
         ep_tb_hits = 0
         ep_sf_hits = 0
+        # Path A instrumentation accumulators (reset each episode)
+        ep_pa_elapsed  = 0.0
+        ep_pb_elapsed  = 0.0
+        ep_pa_spikes   = 0
+        ep_pa_n_moves  = 0
+        ep_pa_max_bon  = 0.0
+        ep_pa_mean_bon_sum = 0.0
+        ep_pa_calls    = 0
         
         while not board.is_game_over() and moves_made < 200:
             curr_np = len(board.piece_map())
@@ -534,6 +549,16 @@ def run_phase18(episodes=2000):
 
                 loss_val = (raw_pred - target_q) ** 2
                 ep_mse_sum += loss_val
+
+                # ── Accumulate Path A/B instrumentation from planner ──────────
+                ep_pa_elapsed  += getattr(planner, '_last_path_a_elapsed',   0.0)
+                ep_pb_elapsed  += getattr(planner, '_last_path_b_elapsed',   0.0)
+                ep_pa_spikes   += getattr(planner, '_last_path_a_spikes',    0)
+                ep_pa_n_moves  += getattr(planner, '_last_path_a_n_moves',   0)
+                ep_pa_max_bon   = max(ep_pa_max_bon,
+                                      getattr(planner, '_last_path_a_max_bonus', 0.0))
+                ep_pa_mean_bon_sum += getattr(planner, '_last_path_a_mean_bonus', 0.0)
+                ep_pa_calls    += 1
 
                 # ── WorldModel: train complex encoder on this position ─────────
                 # Predict the next complex latent state for the chosen move,
@@ -739,7 +764,15 @@ def run_phase18(episodes=2000):
         l = rolling_results.count('L')
         d = rolling_results.count('D')
         print(f"  -> Rolling Stats (Last {len(rolling_results)}): {w}W / {l}L / {d}D | Elo: {manoid_elo:.0f} (vs SF{opponent_level}≈{opp_elo})")
-        
+        # ── Path A / B instrumentation ────────────────────────────────────────
+        if ep_pa_calls > 0 and world_model is not None:
+            spike_rate = ep_pa_spikes / max(1, ep_pa_n_moves)
+            mean_bon   = ep_pa_mean_bon_sum / ep_pa_calls
+            wm_label   = "ON" if USE_WORLD_MODEL_BONUS else "OFF"
+            print(f"  -> PathA[{wm_label}] spikes={ep_pa_spikes}/{ep_pa_n_moves}"
+                  f"({spike_rate*100:.1f}%) | "
+                  f"bonus mean={mean_bon:.5f} max={ep_pa_max_bon:.5f} | "
+                  f"t_A={ep_pa_elapsed:.2f}s t_B={ep_pb_elapsed:.2f}s")
         skip_consolidation = False
         print("  -> Plasticity Override: Forcing TRAIN for Policy Bootstrapping.")
                 

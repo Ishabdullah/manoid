@@ -26,6 +26,11 @@ from agent.consolidation.lora import LoRALinear
 
 _PI2 = math.pi ** 2
 
+# Weight applied to the π² resonance bonus when combining Path A with Path B
+# probabilities.  Set to 0.0 to effectively disable Path A's effect on move
+# selection without changing code paths (useful for ablation).
+RESONANCE_WEIGHT = 1.0
+
 
 def _encode_move_cfloat(move: chess.Move, action_dim: int = 16,
                         device: str = 'cpu') -> torch.Tensor:
@@ -164,15 +169,19 @@ class ChessNodePhase14:
 
 class BatchingMCTSPlanner:
     def __init__(self, env, value_model, engine, batch_size=32,
-                 world_model=None, episodic_memory=None):
+                 world_model=None, episodic_memory=None,
+                 use_world_model_bonus: bool = True):
         self.env = env
         self.value_model = value_model
         self.engine = engine
         self.exploration_weight = math.sqrt(2)
         self.batch_size = batch_size
         # Complex phase-space routing modules (optional)
-        self.world_model    = world_model      # ComplexEncoder + predictors
-        self.episodic_memory = episodic_memory # HRR episodic buffer
+        self.world_model     = world_model       # ComplexEncoder + predictors
+        self.episodic_memory = episodic_memory   # HRR episodic buffer
+        # Ablation flag: when False Path A runs (encode + memory store) but its
+        # resonance bonus is NOT written to move_probs, giving pure Path-B behaviour.
+        self.use_world_model_bonus = use_world_model_bonus
 
     USE_GUMBEL_SEARCH = True
 
@@ -436,69 +445,116 @@ class BatchingMCTSPlanner:
 
         # ------------------------------------------------------------------
         # Path A: Complex phase-space routing through WorldModel
-        # Routes cfloat tensors between Environment → WorldModel → Memory
-        # without flattening.
+        #
+        # Batching strategy: all legal moves for a given FEN are stacked into
+        # a single (N_moves, D) batch and processed in one predict_ensemble()
+        # call, eliminating the previous per-move Python loop overhead.
+        #
+        # Episodic memory note: outcomes are stored as z (current latent) as a
+        # placeholder.  NO update occurs after the game concludes because no
+        # post-game outcome correction is currently wired in.  Consequence: HRR
+        # memory traces carry uninformative self-targets; retrieval similarity
+        # is valid but decoded outcomes will all resemble the current position
+        # rather than the terminal game result.  A future fix should call
+        # episodic_memory.update_confidence(indices, delta) at game end and
+        # overwrite stored outcomes with the true terminal z or scalar result.
         # ------------------------------------------------------------------
+        import time as _time
+
+        # Per-call instrumentation accumulators (stored on self so marathon can read)
+        _path_a_t0 = _time.monotonic()
         complex_latents: List[Optional[torch.Tensor]] = [None] * len(fens_to_eval)
-        resonance_bonuses: List[float] = [0.0] * len(fens_to_eval)
+        # resonance_bonus_per_node[idx][move] → raw bonus before Path B sees it
+        resonance_bonus_map: List[dict] = [{} for _ in fens_to_eval]
+        path_a_spike_count = 0
+        path_a_total_bonus = 0.0
+        path_a_max_bonus   = 0.0
+        path_a_n_moves     = 0
 
         if self.world_model is not None:
             with torch.no_grad():
-                for idx, fen in enumerate(fens_to_eval):
-                    # 1. Encode board as complex frequency spectrum
-                    z_spectrum = self.env.encode_state(fen)    # (1, 12, 8, 8) cfloat
+                # ── Batch-encode all FENs at once ─────────────────────────
+                spectra = torch.cat(
+                    [self.env.encode_state(fen) for fen in fens_to_eval], dim=0
+                )  # (N_fens, 12, 8, 8) cfloat
+                z_all = self.world_model.encode(spectra)  # (N_fens, D) cfloat
 
-                    # 2. Encode into complex latent space
-                    z = self.world_model.encode(z_spectrum)    # (1, D) cfloat
+                for idx, fen in enumerate(fens_to_eval):
+                    z = z_all[idx:idx+1]          # (1, D) cfloat
                     complex_latents[idx] = z
 
-                    # 3. Compute harmonic resonance for each legal move
-                    node = nodes[node_indices[idx]]
-                    board = chess.Board(fen)
+                    node       = nodes[node_indices[idx]]
+                    board      = chess.Board(fen)
                     legal_moves = list(board.legal_moves)
+                    if not legal_moves:
+                        continue
 
-                    move_res_scores = []
-                    for move in legal_moves:
-                        a_cfloat = _encode_move_cfloat(
-                            move, action_dim=self.world_model.action_dim)
-                        preds = self.world_model.predict_ensemble(z, a_cfloat)
-                        # Phase variance as resonance proxy
-                        angles   = preds.angle()
-                        phase_var = angles.var(dim=0).mean().item()
-                        move_res_scores.append((move, phase_var))
+                    # ── Batch all legal moves for this position ────────────
+                    # Build (N_moves, action_dim) cfloat action matrix
+                    action_tensors = torch.cat(
+                        [_encode_move_cfloat(m, action_dim=self.world_model.action_dim)
+                         for m in legal_moves], dim=0
+                    )  # (N_moves, action_dim) cfloat
 
-                    # 4. Detect π² spikes and update move_probs with bonus
-                    spike_threshold = _PI2 / max(1, len(move_res_scores))
-                    total_bonus = 0.0
-                    for move, res in move_res_scores:
+                    # Expand z to match the move batch
+                    z_expanded = z.expand(len(legal_moves), -1)  # (N_moves, D)
+
+                    # Single predict_ensemble call for all moves
+                    preds = self.world_model.predict_ensemble(
+                        z_expanded, action_tensors
+                    )  # (H, N_moves, D) cfloat
+
+                    # Phase variance across heads per move
+                    angles    = preds.angle()                      # (H, N_moves, D)
+                    phase_var = angles.var(dim=0).mean(dim=-1)     # (N_moves,) real
+
+                    spike_threshold = _PI2 / max(1, len(legal_moves))
+                    path_a_n_moves += len(legal_moves)
+
+                    for m_idx, move in enumerate(legal_moves):
+                        res = phase_var[m_idx].item()
                         if res > spike_threshold:
                             bonus = res / (_PI2 + 1e-8)
-                            node.move_probs[move] = (
-                                node.move_probs.get(move, 1e-8) + bonus)
-                            total_bonus += bonus
-                    resonance_bonuses[idx] = total_bonus
+                            path_a_spike_count  += 1
+                            path_a_total_bonus  += bonus
+                            path_a_max_bonus     = max(path_a_max_bonus, bonus)
+                            # Store bonus keyed by move for Path B to consume
+                            if self.use_world_model_bonus:
+                                resonance_bonus_map[idx][move] = bonus
 
-                    # 5. Store complex latent in HRR episodic memory (if attached)
+                    # ── HRR episodic memory store ──────────────────────────
+                    # BUG NOTE (documented): outcome stored = z (current pos),
+                    # never updated to terminal game result after game ends.
+                    # See module docstring above for consequence.
                     if self.episodic_memory is not None and node.parent is not None:
                         try:
-                            # Use a dummy outcome = z itself and confidence from resonance
-                            conf = min(1.0, total_bonus / (_PI2 + 1e-8) + 0.1)
-                            # Need a move for the action; use the node's own move
+                            total_b = sum(resonance_bonus_map[idx].values())
+                            conf = min(1.0, total_b / (_PI2 + 1e-8) + 0.1)
                             if node.move is not None:
-                                a_cfloat = _encode_move_cfloat(
+                                a_c = _encode_move_cfloat(
                                     node.move, action_dim=self.world_model.action_dim)
                                 self.episodic_memory.store(
                                     state=z.squeeze(0),
-                                    action=a_cfloat.squeeze(0),
-                                    outcome=z.squeeze(0),  # placeholder; updated after game
+                                    action=a_c.squeeze(0),
+                                    outcome=z.squeeze(0),  # placeholder — NOT corrected post-game
                                     confidence=torch.tensor([conf])
                                 )
                         except Exception:
-                            pass  # Memory store is non-critical
+                            pass  # non-critical
+
+        path_a_elapsed = _time.monotonic() - _path_a_t0
+        # Store on self so marathon's per-episode logging can read these
+        self._last_path_a_elapsed   = path_a_elapsed
+        self._last_path_a_spikes    = path_a_spike_count
+        self._last_path_a_n_moves   = path_a_n_moves
+        self._last_path_a_mean_bonus = (path_a_total_bonus / max(1, path_a_spike_count))
+        self._last_path_a_max_bonus  = path_a_max_bonus
 
         # ------------------------------------------------------------------
         # Path B: Legacy real-tensor value model (always runs for scalar v)
         # ------------------------------------------------------------------
+        _path_b_t0 = _time.monotonic()
+
         tensor_states = torch.cat(
             [self.env.encode_state_real(fen) for fen in fens_to_eval], dim=0)
 
@@ -522,19 +578,30 @@ class BatchingMCTSPlanner:
                 v_preds = [v_preds]
             p_from_probs = torch.softmax(p_from_logits, dim=-1).cpu().numpy()
             p_to_probs   = torch.softmax(p_to_logits,   dim=-1).cpu().numpy()
+
+        self._last_path_b_elapsed = _time.monotonic() - _path_b_t0
                 
         sf_vals = []
         for i, fen in enumerate(fens_to_eval):
             board = chess.Board(fen)
             
-            # Map policy probabilities to node
+            # Map policy probabilities to node, combining with Path A resonance.
+            # BUG FIX: previously Path B overwrote move_probs with a plain
+            # assignment, discarding whatever Path A had written.  Now Path B
+            # reads the bonus Path A stored (0.0 if no spike / bonus disabled)
+            # and combines multiplicatively so the base policy distribution is
+            # amplified toward resonance-spiking moves:
+            #   prob' = base_prob * (1 + RESONANCE_WEIGHT * resonance_bonus)
+            # Normalization afterward keeps this a valid distribution.
             node = nodes[node_indices[i]]
             legal_moves = list(board.legal_moves)
             for move in legal_moves:
-                prob = p_from_probs[i][move.from_square] * p_to_probs[i][move.to_square]
-                node.move_probs[move] = prob
+                base_prob        = (p_from_probs[i][move.from_square]
+                                    * p_to_probs[i][move.to_square])
+                resonance_bonus  = resonance_bonus_map[i].get(move, 0.0)
+                node.move_probs[move] = base_prob * (1.0 + RESONANCE_WEIGHT * resonance_bonus)
             
-            # Normalize probabilities for valid moves only
+            # Normalize so move_probs remains a valid distribution
             total_prob = sum(node.move_probs.values())
             if total_prob > 0:
                 for move in node.move_probs:
